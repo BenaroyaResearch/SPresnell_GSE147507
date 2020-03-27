@@ -52,7 +52,7 @@ theme_set(theme_bw() + theme(text = element_text(face="bold", size=14), plot.tit
 gene_key <- read.table("~/lib/R/EnsemblToHGNC_GRCh38.txt", header = TRUE,sep = "\t",na.strings = "")
 
 counts  <- read.table(file=file.path(dataDir, "GSE147507_RawReadCounts.tsv"), row.names=1)
-counts  <- counts[,order(colnames(counts))]
+#counts  <- counts[,order(colnames(counts))]
 
 design <- read.csv(file=file.path(dataDir, "design.csv"), row.names = 1)
 ```
@@ -172,7 +172,7 @@ fit2 <- eBayes(fit)
 ```
 
 ```{r PostvsPreSARS004.Volcano, fig.width=10.0, fig.height=10.0, results='asis'}
-Volcano(fit2, "postTreatment", "GSE147507 SARS004 SARS-CoV-2 infected vs mock", labelSource = "genes", write=T)
+Volcano(fit2, "postTreatment", "GSE147507 Lung Epithelial SARS-CoV-2 infected vs mock", labelSource = "genes", write=T)
 ```
 
 ```{r compareLung}
@@ -182,10 +182,10 @@ filteredLungACCounts  <- filteredCounts[,colnames(filteredCounts) %in% rownames(
 
 
 d<-DGEList(counts=filteredLungACCounts, genes=rownames(filteredLungACCounts))
-d<-calcNormFactors(d)
-keepRows <- rowSums(round(cpm(d$counts)) >= 1) >= cut.filter*ncol(filteredLungACCounts)
+LungACDGE<-calcNormFactors(d)
+keepRows <- rowSums(round(cpm(LungACDGE$counts)) >= 1) >= cut.filter*ncol(filteredLungACCounts)
 #table(keepRows)
-curLungACDGE <-d[keepRows,]
+curLungACDGE <-LungACDGE[keepRows,]
 curLungACDGE <- calcNormFactors(curLungACDGE)
 
 ```
@@ -208,7 +208,43 @@ fit2 <- eBayes(fit)
 ```
 
 ```{r PostvsPreLungAC004.Volcano, fig.width=10.0, fig.height=10.0, results='asis'}
-Volcano(fit2, "postInvection", "GSE147507 LungAdeno SARS-CoV-2 infected vs mock", labelSource = "genes", write=T)
+Volcano(fit2, "postInfection", "GSE147507 Lung Adeno SARS-CoV-2 infected vs mock", labelSource = "genes", write=T)
+```
+
+```{r compareLungRSV}
+
+filteredLungRSVDesign  <- filteredDesign %>% subset(Base == "svRNA184")
+filteredLungRSVCounts  <- filteredCounts[,colnames(filteredCounts) %in% rownames(filteredLungRSVDesign)]
+
+
+d<-DGEList(counts=filteredLungRSVCounts, genes=rownames(filteredLungRSVCounts))
+LungRSVDGE<-calcNormFactors(d)
+keepRows <- rowSums(round(cpm(LungRSVDGE$counts)) >= 1) >= cut.filter*ncol(filteredLungRSVCounts)
+#table(keepRows)
+curLungRSVDGE <-LungRSVDGE[keepRows,]
+curLungRSVDGE <- calcNormFactors(curLungRSVDGE)
+
+```
+
+```{r LungRSVDGE}
+
+testDGE                <- curLungRSVDGE
+testDesign             <- filteredLungRSVDesign
+testDesign$Treatment   <- factor(testDesign$Treatment, levels=c("mock", "RSV"))
+
+#table(testDesign$shortName, testDesign$treatment)
+
+
+intMM <- model.matrix(~Treatment, data=testDesign)
+colnames(intMM) <- c("(Intercept)", "postRSVInfection")
+
+LungRSVVoom  <- voomWithQualityWeights(testDGE, design=intMM)
+fit <- lmFit(LungRSVVoom, intMM)
+fit2 <- eBayes(fit)
+```
+
+```{r PostvsPreLungRSV004.Volcano, fig.width=10.0, fig.height=10.0, results='asis'}
+Volcano(fit2, "postRSVInfection", "GSE147507 Lung AC cells RSV infected vs mock", labelSource = "genes", write=T)
 ```
 
 ```{r selected_gene_plots, fig.width=7, fig.height=5}
@@ -238,7 +274,7 @@ plot_gene_expr <- function(counts, design, genes, plot_title){
     
 }
 
-PlotGeneExpression <- function(counts, design, genes, plotTitle, fileType="png") {
+PlotGeneExpression <- function(counts, design, genes, plotTitle, treatmentLevels=c("mock", "CoV2"), fileType="png") {
   #Add gene expression (lt2 +1) counts to design
   selected_gene_exprs <- log2(counts[genes,]+1)
   design <- cbind(design, t(selected_gene_exprs))
@@ -247,7 +283,7 @@ PlotGeneExpression <- function(counts, design, genes, plotTitle, fileType="png")
   design_gathered <- gather(design[,c("Treatment", genes)],
                                 key="gene", value="expression", -Treatment)
   design_gathered$gene_f <- factor(design_gathered$gene, levels=genes)
-  design_gathered$Treatment <- factor(design_gathered$Treatment, levels=c("mock", "CoV2"))
+  design_gathered$Treatment <- factor(design_gathered$Treatment, treatmentLevels)
                                       
   fileName <- sprintf("%s_%s.%s", project, gsub(" ", "_", plotTitle), fileType)
   p <- ggplot(data = design_gathered, aes(x=Treatment, y = expression)) +
@@ -265,7 +301,13 @@ PlotGeneExpression <- function(counts, design, genes, plotTitle, fileType="png")
 #ggsave(filename=file.path(resultsDir, fileName))
 }
 
-counts_norm <- edgeR::cpm(curSARSDGE, normalized.lib.sizes=TRUE)
-
+counts_norm_SARS <- edgeR::cpm(curSARSDGE, normalized.lib.sizes=TRUE)
 PlotGeneExpression(counts_norm, filteredSARSDesign, interesting_genes, "GSE147507 Interesting Genes From Lung Epithelium (NHBE)")
+
+counts_norm_LungAC <- edgeR::cpm(LungACDGE, normalized.lib.sizes=TRUE)
+PlotGeneExpression(counts_norm_LungAC, filteredLungACDesign, interesting_genes, "GSE147507 Interesting Genes From Lung AC with SARS-CoV-2")
+
+counts_norm_LungRSV <- edgeR::cpm(LungRSVDGE, normalized.lib.sizes=TRUE)
+PlotGeneExpression(counts_norm_LungRSV, filteredLungRSVDesign, interesting_genes, "GSE147507 Interesting Genes From Lung AC with RSV", treatmentLevels=c("mock", "RSV"))
+
 ```
