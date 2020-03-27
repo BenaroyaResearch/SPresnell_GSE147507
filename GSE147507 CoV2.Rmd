@@ -1,0 +1,271 @@
+---
+title: "GSE147507"
+author: "Scott Presnell"
+date: "3/26/2020"
+output: pdf_document
+---
+
+## Executive Summary
+
+
+```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
+library(knitr)
+library(tidyverse) #loads ggplot2, tidyr, dplyr, stringr
+library(magrittr)
+library(readxl)
+library(limma)
+library(edgeR)
+library(ggrepel)
+library(ggcorrplot)
+library(DGETools)
+
+#library(BRIRUtils)# SRP camelNames, validateLibraryFrame, validate_library_frame
+#library(DGETools) # SRP Volcano
+library(RNAseQC)  # MJD calc_PCcors
+#library(reshape2)
+
+opts_chunk$set(cache=FALSE, autodep = TRUE, fig.width=6, fig.height=4.0, echo=FALSE, warning=FALSE, message=FALSE)
+options(digits=4)
+
+project    <- "GSE147507"
+dataDir    <- "data"
+resultsDir <- "results"
+
+dataFile          <- file.path(dataDir, paste(project, "data.Rdata", sep="_"))
+normCountsFile    <- file.path(resultsDir, paste(project, "TMM", "NormCounts.csv", sep="_"))
+
+# QC Cuts
+cut.alignment <- 0.75
+cut.medianCV <- 0.75
+cut.filter <- 0.1
+
+# Stat cuts
+cut.fc   <- 1.5
+cut.pval <- 0.05
+
+# set the ggplot theme
+theme_set(theme_bw() + theme(text = element_text(face="bold", size=14), plot.title = element_text(face="bold", hjust = 0.5)))
+```
+
+```{r loading}
+
+gene_key <- read.table("~/lib/R/EnsemblToHGNC_GRCh38.txt", header = TRUE,sep = "\t",na.strings = "")
+
+counts  <- read.table(file=file.path(dataDir, "GSE147507_RawReadCounts.tsv"), row.names=1)
+counts  <- counts[,order(colnames(counts))]
+
+design <- read.csv(file=file.path(dataDir, "design.csv"), row.names = 1)
+```
+
+```{r barcounts}
+tcounts <-data.frame(alignedCounts=apply(counts, 2, sum)/1e6, base=factor(design$Base))
+#tcounts <-data.frame(alignedCounts=apply(counts, 2, sum)/1e6)
+ggplot(tcounts, aes(reorder(rownames(tcounts), alignedCounts), alignedCounts, fill=base)) +
+#ggplot(tcounts, aes(reorder(rownames(tcounts), alignedCounts), alignedCounts)) +
+  labs(fill='Experiment') +
+  geom_bar(stat="identity") + theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  xlab("Library") + ylab("Aligned Counts / 1e6") +
+  ggtitle("GSE147507 QC: Library Counts")
+```
+
+
+```{r filter}
+
+filteredCounts  <- select(counts, !grep("X3", colnames(counts)))
+filteredDesign  <- subset(design, !grepl("X3", rownames(design)))
+
+all(colnames(filteredCounts) == rownames(filteredDesign))
+```
+
+```{r PreliminaryEdgeR}
+filteredGenes  <- rownames(filteredCounts)
+# and sanity check
+#table(rownames(filteredCounts) == filteredGenes$ensembl_gene_id)
+
+d<-DGEList(counts=filteredCounts, genes=filteredGenes)
+d<-calcNormFactors(d)
+keepRows <- rowSums(round(cpm(d$counts)) >= 1) >= cut.filter*ncol(filteredCounts)
+table(keepRows)
+curDGE <-d[keepRows,]
+curDGE <- calcNormFactors(curDGE)
+
+# if (!file.exists(normCountsFile)) {
+#   normAnnot <- cbind(curDGE$genes, cpm(curDGE))
+#   write.csv(normAnnot, file=normCountsFile, quote=F)
+# }
+
+```
+
+```{r PCASetup}
+normCounts <- cpm(curDGE, log=T)
+pcaResult <- prcomp(t(normCounts))
+# check for coherent row order.
+#table(rownames(pcaResult$x) == filteredDesign$libraryId)
+pcaSummary <- summary(pcaResult)
+pcaDesign <- cbind(pcaResult$x, filteredDesign)
+pcaDesign$label <- paste0("PC", 1:length(pcaSummary$importance[2,]),
+                          " (", round(pcaSummary$importance[2,]*100, 1), "%)")
+
+```
+
+```{r PCAPlot}
+ggplot(data=pcaDesign, aes(x=PC1, y=PC2)) +
+  geom_point(aes(color=Base, shape=Treatment), size=3) +
+  labs(x = pcaDesign$label[1], y = pcaDesign$label[2], color="Base", shape="Treatment") +
+  theme_bw() +
+  ggtitle("GSE147507: PCA By Sample Type")
+
+```
+
+```{r compareSARS}
+
+filteredSARSDesign  <- filteredDesign %>% subset(Base == "SARS004")
+filteredSARSCounts  <- filteredCounts[,colnames(filteredCounts) %in% rownames(filteredSARSDesign)]
+
+
+d<-DGEList(counts=filteredSARSCounts, genes=rownames(filteredSARSCounts))
+d<-calcNormFactors(d)
+keepRows <- rowSums(round(cpm(d$counts)) >= 1) >= cut.filter*ncol(filteredSARSCounts)
+#table(keepRows)
+curSARSDGE <-d[keepRows,]
+curSARSDGE <- calcNormFactors(curSARSDGE)
+
+```
+
+```{r PCASetupSARS}
+normCounts <- cpm(curSARSDGE, log=T)
+pcaResult <- prcomp(t(normCounts))
+# check for coherent row order.
+#table(rownames(pcaResult$x) == filteredDesign$libraryId)
+pcaSummary <- summary(pcaResult)
+pcaDesign <- cbind(pcaResult$x, filteredSARSDesign)
+pcaDesign$label <- paste0("PC", 1:length(pcaSummary$importance[2,]),
+                          " (", round(pcaSummary$importance[2,]*100, 1), "%)")
+
+```
+
+```{r PCAPlot}
+ggplot(data=pcaDesign, aes(x=PC1, y=PC2)) +
+  geom_point(aes(color=Treatment), size=3) +
+  labs(x = pcaDesign$label[1], y = pcaDesign$label[2], color="Treatment") +
+  theme_bw() +
+  ggtitle("GSE147507: PCA of Epitheilal cells By Treatment")
+
+```
+
+```{r SARSDGE}
+
+testDGE                <- curSARSDGE
+testDesign             <- filteredSARSDesign
+testDesign$Treatment   <- factor(testDesign$Treatment, levels=c("mock", "CoV2"))
+
+#table(testDesign$shortName, testDesign$treatment)
+
+
+intMM <- model.matrix(~Treatment, data=testDesign)
+colnames(intMM) <- c("(Intercept)", "postTreatment")
+
+SARSVoom  <- voomWithQualityWeights(testDGE, design=intMM)
+fit <- lmFit(SARSVoom, intMM)
+fit2 <- eBayes(fit)
+```
+
+```{r PostvsPreSARS004.Volcano, fig.width=10.0, fig.height=10.0, results='asis'}
+Volcano(fit2, "postTreatment", "GSE147507 SARS004 SARS-CoV-2 infected vs mock", labelSource = "genes", write=T)
+```
+
+```{r compareLung}
+
+filteredLungACDesign  <- filteredDesign %>% subset(Base == "CoV002")
+filteredLungACCounts  <- filteredCounts[,colnames(filteredCounts) %in% rownames(filteredLungACDesign)]
+
+
+d<-DGEList(counts=filteredLungACCounts, genes=rownames(filteredLungACCounts))
+d<-calcNormFactors(d)
+keepRows <- rowSums(round(cpm(d$counts)) >= 1) >= cut.filter*ncol(filteredLungACCounts)
+#table(keepRows)
+curLungACDGE <-d[keepRows,]
+curLungACDGE <- calcNormFactors(curLungACDGE)
+
+```
+
+```{r LungACDGE}
+
+testDGE                <- curLungACDGE
+testDesign             <- filteredLungACDesign
+testDesign$Treatment   <- factor(testDesign$Treatment, levels=c("mock", "CoV2"))
+
+#table(testDesign$shortName, testDesign$treatment)
+
+
+intMM <- model.matrix(~Treatment, data=testDesign)
+colnames(intMM) <- c("(Intercept)", "postInvection")
+
+LungACVoom  <- voomWithQualityWeights(testDGE, design=intMM)
+fit <- lmFit(LungACVoom, intMM)
+fit2 <- eBayes(fit)
+```
+
+```{r PostvsPreLungAC004.Volcano, fig.width=10.0, fig.height=10.0, results='asis'}
+Volcano(fit2, "postInvection", "GSE147507 LungAdeno SARS-CoV-2 infected vs mock", labelSource = "genes", write=T)
+```
+
+```{r selected_gene_plots, fig.width=7, fig.height=5}
+inhibitory_receptor_genes <- c("CD160", "HAVCR2", "KLRG1", "LAG3", "PDCD1", "TIGIT")
+effector_molecules_genes <- c("GZMA", "GZMB", "GZMH", "GZMK", "IFNG", "PRF1")
+transcription_factors_genes <- c("E2F1", "EOMES", "MAF", "STAT1", "STAT4", "TBX21")
+other_genes_of_interest <- c("LAG3", "CTLA4", "ENTPD1")
+interesting_genes <- c("IL8", "ACE2", "TMPRSS2")
+plot_gene_expr <- function(counts, design, genes, plot_title){
+  #Add gene expression (lt2 +1) counts to design
+  selected_gene_exprs <- log2(counts[genes,]+1)
+  design <- cbind(design, t(selected_gene_exprs[,design$libid]))
+  
+  #Melt so that faceting can be used on the gene 
+  design_gathered <- gather(design[,c("Treatment", genes)], 
+                            key="gene", value="expression", -pid, -specificity, -visit)
+ 
+  ggplot() +
+    geom_violin(data = design_gathered, aes(x=interaction(visit, specificity), y = expression))+
+    geom_quasirandom(data = design_gathered, aes(x=interaction(visit, specificity), y = expression, color=pid, shape=specificity), groupOnX = TRUE)+
+    scale_color_manual(values = pid_cols)+
+    scale_shape_manual(values = c(8,16))+
+    labs(x="", y = "log2(counts+1)", color="donor", shape="specificity",title = plot_title)+
+    facet_wrap(~gene)+
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+    theme(text = element_text(size=12))
+    
+}
+
+PlotGeneExpression <- function(counts, design, genes, plotTitle, fileType="png") {
+  #Add gene expression (lt2 +1) counts to design
+  selected_gene_exprs <- log2(counts[genes,]+1)
+  design <- cbind(design, t(selected_gene_exprs))
+
+  #Melt so that faceting can be used on the gene
+  design_gathered <- gather(design[,c("Treatment", genes)],
+                                key="gene", value="expression", -Treatment)
+  design_gathered$gene_f <- factor(design_gathered$gene, levels=genes)
+  design_gathered$Treatment <- factor(design_gathered$Treatment, levels=c("mock", "CoV2"))
+                                      
+  fileName <- sprintf("%s_%s.%s", project, gsub(" ", "_", plotTitle), fileType)
+  p <- ggplot(data = design_gathered, aes(x=Treatment, y = expression)) +
+    geom_boxplot() +
+    geom_point() +
+    #geom_quasirandom(data = design_gathered, aes(x=visit, y = expression, color=tetDonorId), groupOnX = TRUE) +
+    # scale_color_manual(values = donor_cols)+
+    scale_color_manual(values = "black") +
+    #    scale_shape_manual(values = c(8,16))+
+    labs(x="", y = "log2(counts+1)", color="donor", title = plotTitle)+
+    facet_wrap(~gene_f, scales="free_y")+
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+    theme(text = element_text(size=12))
+    print(p)
+#ggsave(filename=file.path(resultsDir, fileName))
+}
+
+counts_norm <- edgeR::cpm(curSARSDGE, normalized.lib.sizes=TRUE)
+
+PlotGeneExpression(counts_norm, filteredSARSDesign, interesting_genes, "GSE147507 Interesting Genes From Lung Epithelium (NHBE)")
+```
