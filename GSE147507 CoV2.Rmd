@@ -7,6 +7,9 @@ output: pdf_document
 
 ## Executive Summary
 
+One of the greatest threats to humanity is the emergence of a pandemic virus. Among those with the greatest potential for such an event include influenza viruses and coronaviruses. In the last century alone, we have observed four major influenza A virus pandemics as well as the emergence of three highly pathogenic coronaviruses including SARS-CoV-2, the causative agent of the ongoing COVID-19 pandemic. As no effective antiviral treatments or vaccines are presently available against SARS-CoV-2, it is important to understand the host response to this virus as this may guide the efforts in development towards novel therapeutics. Here, we offer the first in-depth characterization of the host transcriptional response to SARS-CoV-2 and other respiratory infections through in vitro and ex vivo model systems. Our data demonstrate that each virus elicits both core antiviral components as well as unique transcriptional footprints. Compared to the response to influenza A virus (IAV) and respiratory syncytial virus (RSV), SARS-CoV-2 elicits a muted response that lacks robust induction of a subset of cytokines including the Type I and Type III interferons as well as a numerous chemokines. Taken together, these data suggest that the unique transcriptional signature of this virus may be responsible for the development of COVID-19
+
+Independent biological triplicates of primary human lung epithelium (NHBE) and transformed lung alveolar (A549) cells were mock treated or infected with SARS-CoV-2 (USA-WA1/2020) at different MOI (NHBE: 2, A549: 0.2). Additionally independent biological duplicates of A549 cells were Mock treated or infected with RSV (A2 strain, MOI 15) or IAV (A/Puerto Rico/8/1934 (H1N1, MOI 5)). mRNA enriched libraries were prepared from total RNA extractions of mock treated or virus infected cells using the TruSeq RNA Library Prep Kit v2 (A549) or TruSeq Stranded mRNA LP (NHBE) according to the manufacturer’s instructions. cDNA libraries were sequenced using an Illumina NextSeq 500 platform. Raw sequencing reads were aligned to the human genome (hg19) using the RNA-Seq Alignment App on Basespace (Illumina, CA)
 
 ```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
 library(knitr)
@@ -241,49 +244,4 @@ fit2 <- eBayes(fit)
 
 ```{r PostvsPreLungRSV004.Volcano, fig.width=10.0, fig.height=10.0, results='asis'}
 Volcano(fit2, "postInfectionRSV", "GSE147507 Lung AC cells RSV infected vs mock", labelSource = "genes", write=T)
-```
-
-```{r selected_gene_plots, fig.width=7, fig.height=5}
-inhibitory_receptor_genes <- c("CD160", "HAVCR2", "KLRG1", "LAG3", "PDCD1", "TIGIT")
-effector_molecules_genes <- c("GZMA", "GZMB", "GZMH", "GZMK", "IFNG", "PRF1")
-transcription_factors_genes <- c("E2F1", "EOMES", "MAF", "STAT1", "STAT4", "TBX21")
-other_genes_of_interest <- c("LAG3", "CTLA4", "ENTPD1")
-interesting_genes <- c("IL8", "ACE2", "TMPRSS2")
-
-PlotGeneExpression <- function(counts, design, genes, plotTitle, treatmentLevels=c("mock", "CoV2"), fileType="png") {
-  #Add gene expression (lt2 +1) counts to design
-  selected_gene_exprs <- log2(counts[genes,]+1)
-  design <- cbind(design, t(selected_gene_exprs))
-
-  #Melt so that faceting can be used on the gene
-  design_gathered <- gather(design[,c("Treatment", genes)],
-                                key="gene", value="expression", -Treatment)
-  design_gathered$gene_f <- factor(design_gathered$gene, levels=genes)
-  design_gathered$Treatment <- factor(design_gathered$Treatment, treatmentLevels)
-                                      
-  fileName <- sprintf("%s_%s.%s", project, gsub(" ", "_", plotTitle), fileType)
-  p <- ggplot(data = design_gathered, aes(x=Treatment, y = expression)) +
-    geom_boxplot() +
-    geom_point() +
-    #geom_quasirandom(data = design_gathered, aes(x=visit, y = expression, color=tetDonorId), groupOnX = TRUE) +
-    # scale_color_manual(values = donor_cols)+
-    scale_color_manual(values = "black") +
-    #    scale_shape_manual(values = c(8,16))+
-    labs(x="", y = "log2(counts+1)", color="donor", title = plotTitle)+
-    facet_wrap(~gene_f, scales="free_y")+
-    theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-    theme(text = element_text(size=12))
-    print(p)
-#ggsave(filename=file.path(resultsDir, fileName))
-}
-
-counts_norm_SARS <- edgeR::cpm(curSARSDGE, normalized.lib.sizes=TRUE)
-PlotGeneExpression(counts_norm_SARS, filteredSARSDesign, interesting_genes, "GSE147507 Interesting Genes From Lung Epithelium (NHBE)")
-
-counts_norm_LungAC <- edgeR::cpm(LungACDGE, normalized.lib.sizes=TRUE)
-PlotGeneExpression(counts_norm_LungAC, filteredLungACDesign, interesting_genes, "GSE147507 Interesting Genes From Lung AC with SARS-CoV-2")
-
-counts_norm_LungRSV <- edgeR::cpm(LungRSVDGE, normalized.lib.sizes=TRUE)
-PlotGeneExpression(counts_norm_LungRSV, filteredLungRSVDesign, interesting_genes, "GSE147507 Interesting Genes From Lung AC with RSV", treatmentLevels=c("mock", "RSV"))
-
 ```
