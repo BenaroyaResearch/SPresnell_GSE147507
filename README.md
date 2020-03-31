@@ -7,7 +7,7 @@ Differential gene expression was determined using the Bioconductor package, limm
 
 There are three comparisons:
 
-Primary human bronchial epithelial cells (NHBE) infected with SARS-CoV-2 vs mock infection(three samples per group)
+Primary human bronchial epithelial cells (NHBE) infected with SARS-CoV-2 vs mock infection (three samples per group)
 
 ![](results/LungEpi_CoV2vsMock.png)
 

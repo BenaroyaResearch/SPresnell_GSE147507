@@ -7,9 +7,12 @@ output: pdf_document
 
 ## Executive Summary
 
-One of the greatest threats to humanity is the emergence of a pandemic virus. Among those with the greatest potential for such an event include influenza viruses and coronaviruses. In the last century alone, we have observed four major influenza A virus pandemics as well as the emergence of three highly pathogenic coronaviruses including SARS-CoV-2, the causative agent of the ongoing COVID-19 pandemic. As no effective antiviral treatments or vaccines are presently available against SARS-CoV-2, it is important to understand the host response to this virus as this may guide the efforts in development towards novel therapeutics. Here, we offer the first in-depth characterization of the host transcriptional response to SARS-CoV-2 and other respiratory infections through in vitro and ex vivo model systems. Our data demonstrate that each virus elicits both core antiviral components as well as unique transcriptional footprints. Compared to the response to influenza A virus (IAV) and respiratory syncytial virus (RSV), SARS-CoV-2 elicits a muted response that lacks robust induction of a subset of cytokines including the Type I and Type III interferons as well as a numerous chemokines. Taken together, these data suggest that the unique transcriptional signature of this virus may be responsible for the development of COVID-19
+One of the greatest threats to humanity is the emergence of a pandemic virus. Among those with the greatest potential for such an event include influenza viruses and coronaviruses. In the last century alone, we have observed four major influenza A virus pandemics as well as the emergence of three highly pathogenic coronaviruses including SARS-CoV-2, the causative agent of the ongoing COVID-19 pandemic. As no effective antiviral treatments or vaccines are presently available against SARS-CoV-2, it is important to understand the host response to this virus as this may guide the efforts in development towards novel therapeutics. Here, we offer the first in-depth characterization of the host transcriptional response to SARS-CoV-2 and other respiratory infections through in vitro and ex vivo model systems. Our data demonstrate that each virus elicits both core antiviral components as well as unique transcriptional footprints. Compared to the response to influenza A virus (IAV) and respiratory syncytial virus (RSV), SARS-CoV-2 elicits a muted response that lacks robust induction of a subset of cytokines including the Type I and Type III interferons as well as a numerous chemokines. Taken together, these data suggest that the unique transcriptional signature of this virus may be responsible for the development of COVID-19tion
 
 Independent biological triplicates of primary human lung epithelium (NHBE) and transformed lung alveolar (A549) cells were mock treated or infected with SARS-CoV-2 (USA-WA1/2020) at different MOI (NHBE: 2, A549: 0.2). Additionally independent biological duplicates of A549 cells were Mock treated or infected with RSV (A2 strain, MOI 15) or IAV (A/Puerto Rico/8/1934 (H1N1, MOI 5)). mRNA enriched libraries were prepared from total RNA extractions of mock treated or virus infected cells using the TruSeq RNA Library Prep Kit v2 (A549) or TruSeq Stranded mRNA LP (NHBE) according to the manufacturer’s instructions. cDNA libraries were sequenced using an Illumina NextSeq 500 platform. Raw sequencing reads were aligned to the human genome (hg19) using the RNA-Seq Alignment App on Basespace (Illumina, CA)
+
+Taken directly from [GSE147507](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE147507) SARS-Cov-2 Dataset from tenOever lab at the Icahn School of Medicine at Mt. Siani
+
 
 ```{r setup, echo=FALSE, message=FALSE, warning=FALSE}
 library(knitr)
@@ -48,13 +51,17 @@ theme_set(theme_bw() + theme(text = element_text(face="bold", size=14), plot.tit
 
 ```{r loading}
 
-gene_key <- read.table("~/lib/R/EnsemblToHGNC_GRCh38.txt", header = TRUE,sep = "\t",na.strings = "")
-
 counts  <- read.table(file=file.path(dataDir, "GSE147507_RawReadCounts.tsv"), row.names=1)
 #counts  <- counts[,order(colnames(counts))]
 
 design <- read.csv(file=file.path(dataDir, "design.csv"), row.names = 1)
 ```
+
+\newpage
+
+## QC Measures
+
+Checking aligned read counts - that's all we have access to with this data.
 
 ```{r barcounts}
 tcounts <-data.frame(alignedCounts=apply(counts, 2, sum)/1e6, base=factor(design$Base))
@@ -74,7 +81,8 @@ ggplot(tcounts, aes(reorder(rownames(tcounts), alignedCounts), alignedCounts, fi
 filteredCounts  <- select(counts, !grep("X3", colnames(counts)))
 filteredDesign  <- subset(design, !grepl("X3", rownames(design)))
 
-all(colnames(filteredCounts) == rownames(filteredDesign))
+# check for coherency of the rows and columns
+#all(colnames(filteredCounts) == rownames(filteredDesign))
 ```
 
 ```{r PreliminaryEdgeR}
@@ -85,7 +93,7 @@ filteredGenes  <- rownames(filteredCounts)
 d<-DGEList(counts=filteredCounts, genes=filteredGenes)
 d<-calcNormFactors(d)
 keepRows <- rowSums(round(cpm(d$counts)) >= 1) >= cut.filter*ncol(filteredCounts)
-table(keepRows)
+#table(keepRows)
 curDGE <-d[keepRows,]
 curDGE <- calcNormFactors(curDGE)
 
@@ -107,6 +115,12 @@ pcaDesign$label <- paste0("PC", 1:length(pcaSummary$importance[2,]),
                           " (", round(pcaSummary$importance[2,]*100, 1), "%)")
 
 ```
+
+\newpage
+
+## PCA Plots
+
+First all samples, then just the epithelial cell based samples...
 
 ```{r PCAPlot}
 ggplot(data=pcaDesign, aes(x=PC1, y=PC2)) +
@@ -170,6 +184,12 @@ fit <- lmFit(SARSVoom, intMM)
 fit2 <- eBayes(fit)
 ```
 
+\newpage
+
+## Differential Expression
+
+Primary human bronchial epithelial cells (NHBE) infected with SARS-CoV-2 vs mock infection (three samples per group)
+
 ```{r PostvsPreSARS004.Volcano, fig.width=10.0, fig.height=10.0, results='asis'}
 Volcano(fit2, "postTreatment", "GSE147507 Lung Epithelial SARS-CoV-2 infected vs mock", labelSource = "genes", write=T)
 ```
@@ -206,6 +226,10 @@ fit <- lmFit(LungACVoom, intMM)
 fit2 <- eBayes(fit)
 ```
 
+\newpage
+
+Lung adenocarcinoma cells (A549) infected with SARS-CoV-2 vs mock infection (three samples per group)
+
 ```{r PostvsPreLungAC004.Volcano, fig.width=10.0, fig.height=10.0, results='asis'}
 Volcano(fit2, "postInfectionLungAC", "GSE147507 Lung Adeno SARS-CoV-2 infected vs mock", labelSource = "genes", write=T)
 ```
@@ -241,6 +265,10 @@ LungRSVVoom  <- voomWithQualityWeights(testDGE, design=intMM)
 fit <- lmFit(LungRSVVoom, intMM)
 fit2 <- eBayes(fit)
 ```
+
+\newpage
+
+Lung adenocarcinoma cells (A549) infected with RSV vs mock infection (two samples per group)
 
 ```{r PostvsPreLungRSV004.Volcano, fig.width=10.0, fig.height=10.0, results='asis'}
 Volcano(fit2, "postInfectionRSV", "GSE147507 Lung AC cells RSV infected vs mock", labelSource = "genes", write=T)
