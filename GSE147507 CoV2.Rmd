@@ -17,12 +17,8 @@ library(limma)
 library(edgeR)
 library(ggrepel)
 library(ggcorrplot)
-library(DGETools)
-
-#library(BRIRUtils)# SRP camelNames, validateLibraryFrame, validate_library_frame
-#library(DGETools) # SRP Volcano
+library(DGETools) # SRP Volcano
 library(RNAseQC)  # MJD calc_PCcors
-#library(reshape2)
 
 opts_chunk$set(cache=FALSE, autodep = TRUE, fig.width=6, fig.height=4.0, echo=FALSE, warning=FALSE, message=FALSE)
 options(digits=4)
@@ -145,7 +141,7 @@ pcaDesign$label <- paste0("PC", 1:length(pcaSummary$importance[2,]),
 
 ```
 
-```{r PCAPlot}
+```{r PCAPlotSARS}
 ggplot(data=pcaDesign, aes(x=PC1, y=PC2)) +
   geom_point(aes(color=Treatment), size=3) +
   labs(x = pcaDesign$label[1], y = pcaDesign$label[2], color="Treatment") +
@@ -200,7 +196,7 @@ testDesign$Treatment   <- factor(testDesign$Treatment, levels=c("mock", "CoV2"))
 
 
 intMM <- model.matrix(~Treatment, data=testDesign)
-colnames(intMM) <- c("(Intercept)", "postInvection")
+colnames(intMM) <- c("(Intercept)", "postInfectionLungAC")
 
 LungACVoom  <- voomWithQualityWeights(testDGE, design=intMM)
 fit <- lmFit(LungACVoom, intMM)
@@ -208,7 +204,7 @@ fit2 <- eBayes(fit)
 ```
 
 ```{r PostvsPreLungAC004.Volcano, fig.width=10.0, fig.height=10.0, results='asis'}
-Volcano(fit2, "postInfection", "GSE147507 Lung Adeno SARS-CoV-2 infected vs mock", labelSource = "genes", write=T)
+Volcano(fit2, "postInfectionLungAC", "GSE147507 Lung Adeno SARS-CoV-2 infected vs mock", labelSource = "genes", write=T)
 ```
 
 ```{r compareLungRSV}
@@ -236,7 +232,7 @@ testDesign$Treatment   <- factor(testDesign$Treatment, levels=c("mock", "RSV"))
 
 
 intMM <- model.matrix(~Treatment, data=testDesign)
-colnames(intMM) <- c("(Intercept)", "postRSVInfection")
+colnames(intMM) <- c("(Intercept)", "postInfectionRSV")
 
 LungRSVVoom  <- voomWithQualityWeights(testDGE, design=intMM)
 fit <- lmFit(LungRSVVoom, intMM)
@@ -244,7 +240,7 @@ fit2 <- eBayes(fit)
 ```
 
 ```{r PostvsPreLungRSV004.Volcano, fig.width=10.0, fig.height=10.0, results='asis'}
-Volcano(fit2, "postRSVInfection", "GSE147507 Lung AC cells RSV infected vs mock", labelSource = "genes", write=T)
+Volcano(fit2, "postInfectionRSV", "GSE147507 Lung AC cells RSV infected vs mock", labelSource = "genes", write=T)
 ```
 
 ```{r selected_gene_plots, fig.width=7, fig.height=5}
@@ -253,26 +249,6 @@ effector_molecules_genes <- c("GZMA", "GZMB", "GZMH", "GZMK", "IFNG", "PRF1")
 transcription_factors_genes <- c("E2F1", "EOMES", "MAF", "STAT1", "STAT4", "TBX21")
 other_genes_of_interest <- c("LAG3", "CTLA4", "ENTPD1")
 interesting_genes <- c("IL8", "ACE2", "TMPRSS2")
-plot_gene_expr <- function(counts, design, genes, plot_title){
-  #Add gene expression (lt2 +1) counts to design
-  selected_gene_exprs <- log2(counts[genes,]+1)
-  design <- cbind(design, t(selected_gene_exprs[,design$libid]))
-  
-  #Melt so that faceting can be used on the gene 
-  design_gathered <- gather(design[,c("Treatment", genes)], 
-                            key="gene", value="expression", -pid, -specificity, -visit)
- 
-  ggplot() +
-    geom_violin(data = design_gathered, aes(x=interaction(visit, specificity), y = expression))+
-    geom_quasirandom(data = design_gathered, aes(x=interaction(visit, specificity), y = expression, color=pid, shape=specificity), groupOnX = TRUE)+
-    scale_color_manual(values = pid_cols)+
-    scale_shape_manual(values = c(8,16))+
-    labs(x="", y = "log2(counts+1)", color="donor", shape="specificity",title = plot_title)+
-    facet_wrap(~gene)+
-    theme(axis.text.x = element_text(angle = 90, hjust = 1))+
-    theme(text = element_text(size=12))
-    
-}
 
 PlotGeneExpression <- function(counts, design, genes, plotTitle, treatmentLevels=c("mock", "CoV2"), fileType="png") {
   #Add gene expression (lt2 +1) counts to design
@@ -302,7 +278,7 @@ PlotGeneExpression <- function(counts, design, genes, plotTitle, treatmentLevels
 }
 
 counts_norm_SARS <- edgeR::cpm(curSARSDGE, normalized.lib.sizes=TRUE)
-PlotGeneExpression(counts_norm, filteredSARSDesign, interesting_genes, "GSE147507 Interesting Genes From Lung Epithelium (NHBE)")
+PlotGeneExpression(counts_norm_SARS, filteredSARSDesign, interesting_genes, "GSE147507 Interesting Genes From Lung Epithelium (NHBE)")
 
 counts_norm_LungAC <- edgeR::cpm(LungACDGE, normalized.lib.sizes=TRUE)
 PlotGeneExpression(counts_norm_LungAC, filteredLungACDesign, interesting_genes, "GSE147507 Interesting Genes From Lung AC with SARS-CoV-2")
