@@ -11,7 +11,7 @@ Primary human bronchial epithelial cells (NHBE) infected with SARS-CoV-2 vs mock
 
 ![](results/LungEpi_CoV2vsMock.png)
 
-Here are the top 100 genes in a report from string-db, indicating both inflammation, and interferon response
+Here are the top 100 genes in a report from string-db, indicating inflammation, cellular recruitment, as well as an interferon response
 
 ![](results/Top100_SARS-Cov-2_DEG.png)
 
