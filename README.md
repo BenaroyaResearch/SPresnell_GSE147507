@@ -11,6 +11,10 @@ Primary human bronchial epithelial cells (NHBE) infected with SARS-CoV-2 vs mock
 
 ![](results/LungEpi_CoV2vsMock.png)
 
+Here are the top 100 genes in a report from string-db, indicating both inflammation, and interferon response
+
+1[](results/Top100_SARS-Cov-2_DEG.png)
+
 Lung adenocarcinoma cells (A549) infected with SARS-CoV-2 vs mock infection (three samples per group)
 
 ![](results/LungAC_CoV2vsMock.png)
